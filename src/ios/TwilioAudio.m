@@ -23,6 +23,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         UIStoryboard *sb = [UIStoryboard storyboardWithName:@"TwilioAudio" bundle:nil];
         ViewController *vc = [sb instantiateViewControllerWithIdentifier:@"ViewController"];
+        vc.modalPresentationStyle = UIModalPresentationFullScreen;
         NSString *callerNumber = number;
         [[NSUserDefaults standardUserDefaults] setObject:callerNumber forKey:@"AudioCallNumber"];
         [[NSUserDefaults standardUserDefaults] synchronize];
@@ -34,6 +35,7 @@
 //            tac.ToNumber = number;
         
         [self.viewController presentViewController:vc animated:YES completion:^{
+            
             CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"ok"];
             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         }];
