@@ -64,12 +64,12 @@
       <source-file src="src/ios/ViewController.m" />
       <resource-file src="src/ios/Resources/TwilioAudio.storyboard" target="Resources/TwilioAudio.storyboard" />
       <resource-file src="src/ios/TwilioLogo.png" target="Resources/TwilioLogo.png" />
-      <pods-config ios-min-version="11.0" use-frameworks="true">
+      <pods-config ios-min-version="15.0" use-frameworks="true">
           <!-- If you are facing 'spec' issues on "ionic cordova platform add ios" un commit this section, here I am specificying which
           github path the specs for the needed Twilio v1 SDK is located -->
           <source url="https://github.com/CocoaPods/Specs.git"/>
         </pods-config>
-        <pod name="TwilioVoice" version="~>5.1.1" />
+        <pod name="TwilioVoice" version="~> 6.11" />
         <preference name="MICROPHONE_USAGE_DESCRIPTION" default="Microphone"/>
         <config-file target="*-Info.plist" parent="NSMicrophoneUsageDescription">
             <string>$MICROPHONE_USAGE_DESCRIPTION</string>
