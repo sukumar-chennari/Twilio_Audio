@@ -6,18 +6,20 @@
 //
 
 #import "ViewController.h"
-#import "AppCenterAnalyticsPlugin.h"
 @import AVFoundation;
 @import PushKit;
 @import CallKit;
 @import TwilioVoice;
 
 
-static NSString *const kYourServerBaseURLString = @"https://c9dev2.cloud9download.com:8080/api/twilio-voice";
-
+//static NSString *const kYourServerBaseURLString = @"https://c9dev2.cloud9download.com:8282/api/twilio-voice";
 //static NSString *const kYourServerBaseURLString = @"https://uat.cloud9download.com:8080/api/twilio-voice";
-//static NSString *const kYourServerBaseURLString = @"https://c9demo.cloud9download.com:8080/api/twilio-voice";
-//    static NSString *const kYourServerBaseURLString = @"https://alaska.cloud9download.com:8080/api/twilio-voice";
+//static NSString *const kYourServerBaseURLString = @"https://collaborativecare.cloud9download.com:8080/api/twilio-voice";
+//static NSString *const kYourServerBaseURLString = @"https://uat.cloud9download.com:8282/api/twilio-voice";
+
+
+static NSString *const kYourServerBaseURLString = @"https://uat2025.cloud9download.com:8080/api/twilio-voice";
+//    static NSString *const kYourServerBaseURLString = @"https://dev.cloud9download.com:8080/api/twilio-voice";
 
 //static NSString *const kYourServerBaseURLString = @"https://mhid.cloud9download.com:8080/api/twilio-voice";
 
@@ -38,6 +40,7 @@ static NSString *const kTwimlParamTo = @"to";
 @property (nonatomic, strong) TVODefaultAudioDevice *audioDevice;
 @property (nonatomic, strong) NSMutableDictionary *activeCallInvites;
 @property (nonatomic, strong) NSMutableDictionary *activeCalls;
+@property (nonatomic, strong) NSData *deviceTokenData;
 
 // activeCall represents the last connected call
 @property (nonatomic, strong) TVOCall *activeCall;
@@ -82,7 +85,7 @@ static NSString *const kTwimlParamTo = @"to";
      * In this case we've already initialized our own `TVODefaultAudioDevice` instance which we will now set.
      */
     self.audioDevice = [TVODefaultAudioDevice audioDevice];
-    TwilioVoice.audioDevice = self.audioDevice;
+    TwilioVoiceSDK.audioDevice = self.audioDevice;
     
     self.activeCallInvites = [NSMutableDictionary dictionary];
     self.activeCalls = [NSMutableDictionary dictionary];
@@ -121,15 +124,63 @@ static NSString *const kTwimlParamTo = @"to";
     }
 }
 
-- (NSString *)fetchAccessToken {
+//- (NSString *)fetchAccessToken {
+//    NSString *accessTokenEndpointWithIdentity = [NSString stringWithFormat:@"%@?identity=%@", kAccessTokenEndpoint, kIdentity];
+//    NSString *accessTokenURLString = [kYourServerBaseURLString stringByAppendingString:accessTokenEndpointWithIdentity];
+//
+//    NSString *accessToken = [NSString stringWithContentsOfURL:[NSURL URLWithString:accessTokenURLString]
+//                                                     encoding:NSUTF8StringEncoding
+//                                                        error:nil];
+//    
+//    return accessToken;
+//}
+- (void)fetchAccessTokenWithCompletion:(void (^)(NSString *accessToken, NSError *error))completion {
+    // Construct the URL string
     NSString *accessTokenEndpointWithIdentity = [NSString stringWithFormat:@"%@?identity=%@", kAccessTokenEndpoint, kIdentity];
     NSString *accessTokenURLString = [kYourServerBaseURLString stringByAppendingString:accessTokenEndpointWithIdentity];
+    NSURL *url = [NSURL URLWithString:accessTokenURLString];
 
-    NSString *accessToken = [NSString stringWithContentsOfURL:[NSURL URLWithString:accessTokenURLString]
-                                                     encoding:NSUTF8StringEncoding
-                                                        error:nil];
-    
-    return accessToken;
+    if (!url) {
+        NSError *error = [NSError errorWithDomain:@"InvalidURLDomain" code:1001 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}];
+        completion(nil, error);
+        return;
+    }
+
+    // Create a URL session
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *dataTask = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            // Handle network error
+            completion(nil, error);
+            return;
+        }
+
+        // Validate the HTTP response
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode != 200) {
+            NSError *statusError = [NSError errorWithDomain:@"HTTPErrorDomain"
+                                                       code:httpResponse.statusCode
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"Failed to fetch access token"}];
+            completion(nil, statusError);
+            return;
+        }
+
+        // Convert the response data to a string
+        NSString *accessToken = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (!accessToken || [accessToken isEqualToString:@""]) {
+            NSError *invalidTokenError = [NSError errorWithDomain:@"AccessTokenDomain"
+                                                             code:1002
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"Access token is invalid or empty"}];
+            completion(nil, invalidTokenError);
+            return;
+        }
+
+        // Successfully retrieved access token
+        completion(accessToken, nil);
+    }];
+
+    // Start the data task
+    [dataTask resume];
 }
 
 - (IBAction)mainButtonPressed:(id)sender {
@@ -238,48 +289,115 @@ static NSString *const kTwimlParamTo = @"to";
 }
 
 #pragma mark - PKPushRegistryDelegate
+//- (void)pushRegistry:(PKPushRegistry *)registry didUpdatePushCredentials:(PKPushCredentials *)credentials forType:(NSString *)type {
+//    NSLog(@"pushRegistry:didUpdatePushCredentials:forType:");
+//
+//    if ([type isEqualToString:PKPushTypeVoIP]) {
+//        const unsigned *tokenBytes = [credentials.token bytes];
+//        self.deviceTokenString = [NSString stringWithFormat:@"<%08x %08x %08x %08x %08x %08x %08x %08x>",
+//                                  ntohl(tokenBytes[0]), ntohl(tokenBytes[1]), ntohl(tokenBytes[2]),
+//                                  ntohl(tokenBytes[3]), ntohl(tokenBytes[4]), ntohl(tokenBytes[5]),
+//                                  ntohl(tokenBytes[6]), ntohl(tokenBytes[7])];
+//        NSString *accessToken = [self fetchAccessToken];
+//
+//        [TwilioVoiceSDK registerWithAccessToken:accessToken
+//                                 deviceToken:self.deviceTokenString
+//                                  completion:^(NSError *error) {
+//             if (error) {
+//                 NSLog(@"An error occurred while registering: %@", [error localizedDescription]);
+//             }
+//             else {
+//                 NSLog(@"Successfully registered for VoIP push notifications.");
+//             }
+//         }];
+//    }
+//}
+
 - (void)pushRegistry:(PKPushRegistry *)registry didUpdatePushCredentials:(PKPushCredentials *)credentials forType:(NSString *)type {
     NSLog(@"pushRegistry:didUpdatePushCredentials:forType:");
 
     if ([type isEqualToString:PKPushTypeVoIP]) {
-        const unsigned *tokenBytes = [credentials.token bytes];
-        self.deviceTokenString = [NSString stringWithFormat:@"<%08x %08x %08x %08x %08x %08x %08x %08x>",
-                                  ntohl(tokenBytes[0]), ntohl(tokenBytes[1]), ntohl(tokenBytes[2]),
-                                  ntohl(tokenBytes[3]), ntohl(tokenBytes[4]), ntohl(tokenBytes[5]),
-                                  ntohl(tokenBytes[6]), ntohl(tokenBytes[7])];
-        NSString *accessToken = [self fetchAccessToken];
+        self.deviceTokenData = credentials.token;
+        // Optional: Log the device token as a string for debugging purposes
+        const unsigned char *tokenBytes = [credentials.token bytes];
+        NSMutableString *tokenString = [NSMutableString stringWithCapacity:credentials.token.length * 2];
+        for (NSInteger i = 0; i < credentials.token.length; i++) {
+            [tokenString appendFormat:@"%02x", tokenBytes[i]];
+        }
+        NSLog(@"Device Token: %@", tokenString);
 
-        [TwilioVoice registerWithAccessToken:accessToken
-                                 deviceToken:self.deviceTokenString
-                                  completion:^(NSError *error) {
-             if (error) {
-                 NSLog(@"An error occurred while registering: %@", [error localizedDescription]);
-             }
-             else {
-                 NSLog(@"Successfully registered for VoIP push notifications.");
-             }
-         }];
+        // Fetch the access token asynchronously
+        [self fetchAccessTokenWithCompletion:^(NSString *accessToken, NSError *error) {
+            if (error) {
+                NSLog(@"Failed to fetch access token: %@", error.localizedDescription);
+                return;
+            }
+
+            // Register with Twilio using the fetched access token and device token (NSData)
+            [TwilioVoiceSDK registerWithAccessToken:accessToken
+                                         deviceToken:self.deviceTokenData
+                                          completion:^(NSError *error) {
+                if (error) {
+                    NSLog(@"An error occurred while registering: %@", [error localizedDescription]);
+                } else {
+                    NSLog(@"Successfully registered for VoIP push notifications.");
+                }
+            }];
+        }];
     }
 }
+
+//- (void)pushRegistry:(PKPushRegistry *)registry didInvalidatePushTokenForType:(PKPushType)type {
+//    NSLog(@"pushRegistry:didInvalidatePushTokenForType:");
+//
+//    if ([type isEqualToString:PKPushTypeVoIP]) {
+//        NSString *accessToken = [self fetchAccessToken];
+//
+//        [TwilioVoiceSDK unregisterWithAccessToken:accessToken
+//                                   deviceToken:self.deviceTokenString
+//                                    completion:^(NSError * _Nullable error) {
+//            if (error) {
+//                NSLog(@"An error occurred while unregistering: %@", [error localizedDescription]);
+//            }
+//            else {
+//                NSLog(@"Successfully unregistered for VoIP push notifications.");
+//            }
+//        }];
+//
+//        self.deviceTokenString = nil;
+//    }
+//}
 
 - (void)pushRegistry:(PKPushRegistry *)registry didInvalidatePushTokenForType:(PKPushType)type {
     NSLog(@"pushRegistry:didInvalidatePushTokenForType:");
 
     if ([type isEqualToString:PKPushTypeVoIP]) {
-        NSString *accessToken = [self fetchAccessToken];
+        if (!self.deviceTokenData) {
+            NSLog(@"Device token is nil; skipping unregister.");
+            return;
+        }
 
-        [TwilioVoice unregisterWithAccessToken:accessToken
-                                   deviceToken:self.deviceTokenString
-                                    completion:^(NSError * _Nullable error) {
+        // Fetch access token asynchronously
+        [self fetchAccessTokenWithCompletion:^(NSString *accessToken, NSError *error) {
             if (error) {
-                NSLog(@"An error occurred while unregistering: %@", [error localizedDescription]);
+                NSLog(@"Failed to fetch access token: %@", error.localizedDescription);
+                return;
             }
-            else {
-                NSLog(@"Successfully unregistered for VoIP push notifications.");
-            }
+
+            // Unregister with Twilio using the access token and device token (NSData)
+            [TwilioVoiceSDK unregisterWithAccessToken:accessToken
+                                           deviceToken:self.deviceTokenData
+                                            completion:^(NSError * _Nullable error) {
+                if (error) {
+                    NSLog(@"An error occurred while unregistering: %@", [error localizedDescription]);
+                } else {
+                    NSLog(@"Successfully unregistered for VoIP push notifications.");
+                }
+            }];
         }];
 
-        self.deviceTokenString = nil;
+        // Reset the device token
+        self.deviceTokenData = nil;
     }
 }
 
@@ -292,7 +410,7 @@ static NSString *const kTwimlParamTo = @"to";
     if ([type isEqualToString:PKPushTypeVoIP]) {
         
         // The Voice SDK will use main queue to invoke `cancelledCallInviteReceived:error` when delegate queue is not passed
-        if (![TwilioVoice handleNotification:payload.dictionaryPayload delegate:self delegateQueue:nil]) {
+        if (![TwilioVoiceSDK handleNotification:payload.dictionaryPayload delegate:self delegateQueue:nil]) {
             NSLog(@"This is not a valid Twilio Voice notification.");
         }
     }
@@ -314,7 +432,7 @@ withCompletionHandler:(void (^)(void))completion {
     
     if ([type isEqualToString:PKPushTypeVoIP]) {
         // The Voice SDK will use main queue to invoke `cancelledCallInviteReceived:error` when delegate queue is not passed
-        if (![TwilioVoice handleNotification:payload.dictionaryPayload delegate:self delegateQueue:nil]) {
+        if (![TwilioVoiceSDK handleNotification:payload.dictionaryPayload delegate:self delegateQueue:nil]) {
             NSLog(@"This is not a valid Twilio Voice notification.");
         }
     }
@@ -407,8 +525,14 @@ withCompletionHandler:(void (^)(void))completion {
     if (self.playCustomRingback) {
         [self stopRingback];
     }
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.callKitCompletionCallback) {
+            self.callKitCompletionCallback(YES);
+        }
+    });
 
-    self.callKitCompletionCallback(YES);
+//    self.callKitCompletionCallback(YES);
     
     [self.placeCallButton setTitle:@"Hang Up" forState:UIControlStateNormal];
     
@@ -703,23 +827,68 @@ withCompletionHandler:(void (^)(void))completion {
     }];
 }
 
+//- (void)performVoiceCallWithUUID:(NSUUID *)uuid
+//                          client:(NSString *)client
+//                      completion:(void(^)(BOOL success))completionHandler {
+//    __weak __typeof__(self) weakSelf = self;
+//    TVOConnectOptions *connectOptions = [TVOConnectOptions optionsWithAccessToken:[self fetchAccessToken] block:^(TVOConnectOptionsBuilder *builder) {
+//        __strong __typeof__(self) strongSelf = weakSelf;
+//        builder.params = @{kTwimlParamTo:self.outgoingValue.text};
+//        builder.uuid = uuid;
+//    }];
+//    TVOCall *call = [TwilioVoiceSDK connectWithOptions:connectOptions delegate:self];
+//    if (call) {
+//        self.activeCall = call;
+//        self.activeCalls[call.uuid.UUIDString] = call;
+//    }
+//    self.callKitCompletionCallback = completionHandler;
+//}
+
 - (void)performVoiceCallWithUUID:(NSUUID *)uuid
                           client:(NSString *)client
                       completion:(void(^)(BOOL success))completionHandler {
     __weak __typeof__(self) weakSelf = self;
-    TVOConnectOptions *connectOptions = [TVOConnectOptions optionsWithAccessToken:[self fetchAccessToken] block:^(TVOConnectOptionsBuilder *builder) {
-        __strong __typeof__(self) strongSelf = weakSelf;
-        builder.params = @{kTwimlParamTo:self.outgoingValue.text};
-        builder.uuid = uuid;
-    }];
-    TVOCall *call = [TwilioVoice connectWithOptions:connectOptions delegate:self];
-    if (call) {
-        self.activeCall = call;
-        self.activeCalls[call.uuid.UUIDString] = call;
-    }
-    self.callKitCompletionCallback = completionHandler;
-}
 
+    // Fetch the access token asynchronously
+    [self fetchAccessTokenWithCompletion:^(NSString *accessToken, NSError *error) {
+        if (error) {
+            NSLog(@"Failed to fetch access token: %@", error.localizedDescription);
+            if (completionHandler) {
+                completionHandler(NO);
+            }
+            return;
+        }
+
+        // Ensure UI access is done on the main thread
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong __typeof__(self) strongSelf = weakSelf;
+
+            // Access the UITextField text on the main thread
+            NSString *to = self.outgoingValue.text;
+
+            // Create connect options once the access token is retrieved
+            TVOConnectOptions *connectOptions = [TVOConnectOptions optionsWithAccessToken:accessToken block:^(TVOConnectOptionsBuilder *builder) {
+                builder.params = @{kTwimlParamTo:to};
+                builder.uuid = uuid;
+            }];
+            
+            // Connect the call using Twilio Voice SDK
+            TVOCall *call = [TwilioVoiceSDK connectWithOptions:connectOptions delegate:self];
+            if (call) {
+                self.activeCall = call;
+                self.activeCalls[call.uuid.UUIDString] = call;
+                if (completionHandler) {
+                    completionHandler(YES);
+                }
+            } else {
+                NSLog(@"Failed to start call.");
+                if (completionHandler) {
+                    completionHandler(NO);
+                }
+            }
+        });
+    }];
+}
 - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
                             completion:(void(^)(BOOL success))completionHandler {
     TVOCallInvite *callInvite = self.activeCallInvites[uuid.UUIDString];
